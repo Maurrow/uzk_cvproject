@@ -161,7 +161,7 @@ class CNN_Fly(nn.Module):
         #return img_out, z, mu, logvar
 
 trnsforms = v2.Compose([
-    v2.RandomHorizontalFlip(p=0.5),                 # Flip image horizontally with 50% chance (also flips keypoints if used)
+    #v2.RandomHorizontalFlip(p=0.5),                 # Flip image horizontally with 50% chance (also flips keypoints if used)
     v2.RandomRotation(degrees=15),                  # Rotate image randomly between -15 and +15 degrees
     #v2.ColorJitter(brightness=0.2, contrast=0.2),  # Randomly adjust brightness and contrast by up to ±20% #TODO Clarify: does this make sense as a transform for the data?
     v2.ToDtype(torch.float32, scale=True),          # Convert image to float32 and rescale pixel values from [0,255] → [0,1]
