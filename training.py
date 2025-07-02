@@ -13,7 +13,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from torchvision.transforms import v2
 
 class FLYDataset(Dataset):
-    def __init__(self, path_to_data, mode="training", cam=0):
+    def __init__(self, path_to_data, mode="training", cam=0, transform=None):
 
         # save selected camera and init lists
         self.cam = cam
@@ -21,6 +21,7 @@ class FLYDataset(Dataset):
         self.annotations = []
         self.H = 480
         self.W = 980
+        self.transform = transform
 
         # e.g path to the data, different classes, number of images per class, or image IDs per class
         if(mode != "test" and mode != "training"):
@@ -39,7 +40,7 @@ class FLYDataset(Dataset):
         if not os.path.isfile(annotation_file_path):
             raise FileExistsError(f"Wrong path to annotation file {annotation_file_path}")
         if not os.path.isdir(image_path):
-            raise FileExistsError(f"Wrong path {image_path}")
+            raise FileExistsError(f"Wrong path to image {image_path}")
         
         # load annotations
         annotations = np.load(annotation_file_path)
@@ -69,6 +70,15 @@ class FLYDataset(Dataset):
         # prepare annotations as tensor
         annotation = self.annotations[idx]
         t_anno = torch.tensor(annotation, dtype=torch.float32)
+        if self.transform:
+            sample = {
+                "image": t_img,
+                "keypoints": t_anno,
+                "keypoints_format": "xy"
+            }
+            sample = self.transform(sample)
+            t_img = sample["image"]
+            t_anno = sample["keypoints"]
 
         return t_img, t_anno
     
@@ -160,7 +170,7 @@ class CNN_Fly(nn.Module):
         return kp_out.view(-1, self.num_joints, 2), z, mu, logvar
         #return img_out, z, mu, logvar
 
-trnsforms = v2.Compose([
+transforms = v2.Compose([
     #v2.RandomHorizontalFlip(p=0.5),                 # Flip image horizontally with 50% chance (also flips keypoints if used)
     v2.RandomRotation(degrees=15),                  # Rotate image randomly between -15 and +15 degrees
     #v2.ColorJitter(brightness=0.2, contrast=0.2),  # Randomly adjust brightness and contrast by up to ±20% #TODO Clarify: does this make sense as a transform for the data?
@@ -183,7 +193,7 @@ def train_keypoint_model(model, dataset, num_epochs=10, batch_size=16, lr=1e-4, 
         for img, keypoints in loop:
             for i in range(img.size(0)):
                 sample = {"image": img[i], "keypoints": keypoints[i]}
-                sample = trnsforms(sample)  # apply v2 transforms
+                sample = transforms(sample)  # apply v2 transforms
 
                 img[i] = sample["image"]
                 keypoints[i] = sample["keypoints"]
