@@ -1,15 +1,11 @@
 import torch
 import numpy as np
 import torch.nn as nn
-from torchvision.io import read_image
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-import matplotlib.image as mpimg
 import os
 import cv2
 from tqdm import tqdm
-from functools import partial
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from torchvision.transforms import v2
 
 class FLYDataset(Dataset):
