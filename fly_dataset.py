@@ -8,7 +8,7 @@ class FLYDataset(Dataset):
     def __init__(self, path_to_data, mode="training", cam=0, transform=None):
         self.cam = cam
         self.H = 480
-        self.W = 980
+        self.W = 960
         self.transform = transform
 
         self.img_paths = []
