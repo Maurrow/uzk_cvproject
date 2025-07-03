@@ -7,6 +7,8 @@ import os
 import cv2
 from tqdm import tqdm
 from torchvision.transforms import v2
+from torchvision.models import resnet50, ResNet50_Weights
+import torchvision.transforms.functional as F
 
 class FLYDataset(Dataset):
     def __init__(self, path_to_data, mode="training", cam=0, transform=None):
@@ -16,7 +18,7 @@ class FLYDataset(Dataset):
         self.img_paths = []
         self.annotations = []
         self.H = 480
-        self.W = 980
+        self.W = 960
         self.transform = transform
 
         # e.g path to the data, different classes, number of images per class, or image IDs per class
@@ -58,10 +60,12 @@ class FLYDataset(Dataset):
         if(idx >= len(self.img_paths)):
             raise LookupError("Invalid index for image")
         img = cv2.imread(self.img_paths[idx], cv2.IMREAD_GRAYSCALE)
+        img = np.stack([img]*3, axis=0)  # [3, H, W]
         
         #creating torch tensor and normalizing,a lso adding front channel to match requirement from torch
         t_img = torch.tensor(img, dtype=torch.float32) / 255
-        t_img = t_img.unsqueeze(0)
+        # When training with ResNet50, this is not required
+        #t_img = t_img.unsqueeze(0)
 
         # prepare annotations as tensor
         annotation = self.annotations[idx]
@@ -166,17 +170,28 @@ class CNN_Fly(nn.Module):
         return kp_out.view(-1, self.num_joints, 2), z, mu, logvar
         #return img_out, z, mu, logvar
 
-transforms = v2.Compose([
-    #v2.RandomHorizontalFlip(p=0.5),                 # Flip image horizontally with 50% chance (also flips keypoints if used)
-    v2.RandomRotation(degrees=15),                  # Rotate image randomly between -15 and +15 degrees
-    #v2.ColorJitter(brightness=0.2, contrast=0.2),  # Randomly adjust brightness and contrast by up to ±20% #TODO Clarify: does this make sense as a transform for the data?
-    v2.ToDtype(torch.float32, scale=True),          # Convert image to float32 and rescale pixel values from [0,255] → [0,1]
-    v2.Normalize(mean=(0.5,), std=(0.5,))           # Normalize image: (x - 0.5) / 0.5 → values now in [-1, 1]
-])
+class ResNet50Keypoints(nn.Module):
+    def __init__(self, num_joints=38):
+        super().__init__()
+        self.backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+
+        # Replace final classification layer with regression head
+        self.backbone.fc = nn.Sequential(
+            nn.Linear(2048, 512),
+            nn.ReLU(),
+            nn.Linear(512, num_joints * 2)
+        )
+
+        self.num_joints = num_joints
+
+    def forward(self, x):
+        out = self.backbone(x)               # shape: [B, num_joints * 2]
+        out = out.view(-1, self.num_joints, 2)  # shape: [B, J, 2]
+        return out
 
 # Train
 def train_keypoint_model(model, dataset, num_epochs=10, batch_size=16, lr=1e-4, device="cuda"):
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = torch.nn.MSELoss()
@@ -187,24 +202,17 @@ def train_keypoint_model(model, dataset, num_epochs=10, batch_size=16, lr=1e-4, 
         loop = tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}")
 
         for img, keypoints in loop:
-            for i in range(img.size(0)):
-                sample = {"image": img[i], "keypoints": keypoints[i]}
-                sample = transforms(sample)  # apply v2 transforms
-
-                img[i] = sample["image"]
-                keypoints[i] = sample["keypoints"]
-
-            img = img.to(device)           # [B, 1, H, W]
+            img       = img.to(device)           # [B, 1, H, W]
             keypoints = keypoints.to(device)     # [B, J, 2]
 
-            preds, _, _, _ = model(img)       # [B, J, 2]
+            preds = model(img)       # [B, J, 2]
             keypoints_px = keypoints.clone()
-            keypoints_px[:, 0] *= dataset.H  # x
-            keypoints_px[:, 1] *= dataset.W  # y
+            keypoints_px[:, :, 0] *= dataset.W
+            keypoints_px[:, :, 1] *= dataset.H
 
             preds_px = preds.clone()
-            preds_px[:, 1] *= dataset.W
-            preds_px[:, 0] *= dataset.H
+            preds_px[:, :, 0] *= dataset.W
+            preds_px[:, :, 1] *= dataset.H
             loss = loss_fn(preds_px, keypoints_px)
 
             optimizer.zero_grad()
@@ -216,69 +224,73 @@ def train_keypoint_model(model, dataset, num_epochs=10, batch_size=16, lr=1e-4, 
 
         print(f"Epoch {epoch+1} - Avg Loss: {total_loss / len(dataloader):.4f}")
     
-    torch.save(model.state_dict(), os.path.join('.', f'fly-test.pt'))
+    torch.save(model.state_dict(), os.path.join('.', f'fly-test-resnet50.pt'))
 
     return model
 
 
-# Visualize
+# Visualize model
 def visualize_predictions(model, dataset, device="cuda", num_samples=5):
     model.eval()
+
     fig, axes = plt.subplots(1, num_samples, figsize=(15, 4))
-    loss_fn = torch.nn.MSELoss()
-    losses = []
+    axes = axes if num_samples > 1 else [axes]
 
     for i in range(num_samples):
         img, true_kp = dataset[i]
+        # Since the model expects a batch, we unsqueeze to create a "batch" 
+        # consisting of a single image.
+        input_img = img.unsqueeze(0).to(device)  # [1, 3, H, W]
+        
+        # Permute to get from [C, H, W] to [H, W, 3]
+        vis_img = img.permute(1, 2, 0).cpu().numpy() 
 
-        input_img = img.unsqueeze(0).to(device)  # [1, 1, H, W]
-
+        # Run model
         with torch.no_grad():
-            pred_kp, _, _, _ = model(input_img)
-            
-        pred_kp = pred_kp.squeeze(0).cpu()
-        true_kp = true_kp.cpu()
-        # Compute MSE loss on normalized coordinates
-        # loss = loss_fn(pred_kp, true_kp).item()
-        # losses.append(loss)
+            # Model returns a batch, meaning [B, J, 2], with squeezing 0 we 
+            # end up with [J, 2].
+            pred_kp = model(input_img).squeeze(0).cpu() 
 
-        # Convert normalized to pixel coordinates
-        true_kp_px = true_kp.clone()
-        true_kp_px[:, 0] *= dataset.H  # x
-        true_kp_px[:, 1] *= dataset.W  # y
+        # Get H, W from the visualize image shape. We permuted earlier, 
+        # meaning now we just cut of the last dim to end up with [H, W].
+        H, W = vis_img.shape[:2]
+        pred_px = pred_kp.clone()
+        pred_px[:, 0] *= W
+        pred_px[:, 1] *= H
 
-        pred_kp_px = pred_kp.clone()
-        pred_kp_px[:, 1] *= dataset.W
-        pred_kp_px[:, 0] *= dataset.H
-
-        loss = loss_fn(pred_kp_px, true_kp_px).item()
-        losses.append(loss)
-
-        img_np = img.squeeze(0).numpy()
+        true_px = true_kp.clone()
+        true_px[:, 0] *= W
+        true_px[:, 1] *= H
 
         ax = axes[i]
-        ax.imshow(img_np, cmap="gray")
-        ax.scatter(pred_kp_px[:, 1], pred_kp_px[:, 0], c="r", label="Pred", s=10)
-        ax.scatter(true_kp_px[:, 1], true_kp_px[:, 0], c="g", label="GT", s=10, alpha=0.6)
-        ax.set_title(f"Sample {i}\nMSE: {loss:.4f}")
+        ax.imshow(vis_img)
+        ax.scatter(pred_px[:, 0], pred_px[:, 1], c='r', label='Predicted', s=10)
+        ax.scatter(true_px[:, 0], true_px[:, 1], c='g', label='GT', s=10, alpha=0.6)
+        ax.set_title(f"Sample {i}")
         ax.axis("off")
 
     plt.tight_layout()
-    plt.legend()
+    axes[0].legend()
     plt.show()
-    avg_loss = sum(losses) / len(losses)
-    print(f"\nAverage MSE over {num_samples} samples: {avg_loss:.4f}")
 
 
-model = CNN_Fly(input_size=(480, 960), embedding_size=32)
-train_dataset = FLYDataset("/scratch/cv-course2025/group2/data")
+# Pre-Trained ResNet50 Model (ImageNet) to have a better starting point 
+model = ResNet50Keypoints()
+
+transforms = v2.Compose([
+    v2.RandomRotation(degrees=15),                  # Rotate image randomly between -15 and +15 degrees
+    v2.ToDtype(torch.float32, scale=True),          # Convert image to float32 and rescale pixel values from [0,255] → [0,1]
+    v2.Normalize(mean=(0.5,), std=(0.5,))           # Normalize image: (x - 0.5) / 0.5 → values now in [-1, 1]
+])
+
+train_dataset = FLYDataset("/scratch/cv-course2025/group2/data", transform=transforms)
 test_dataset = FLYDataset("/scratch/cv-course2025/group2/data", mode="test")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") # Use CPU for debug so you do not use too much GPU time
 print(f"Used Device: {device}")
 print("\nStarting training loop...\n")
 
-m = train_keypoint_model(model, train_dataset, num_epochs=100)
+m = train_keypoint_model(model, train_dataset, num_epochs=5)
 #model.load_state_dict(torch.load("./fly-test.pt"))
 #model.to(device)
 #visualize_predictions(m, test_dataset, device=device)
