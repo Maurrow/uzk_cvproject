@@ -2,7 +2,7 @@ import torch.nn as nn
 from torchvision.models import resnet50, ResNet50_Weights
 
 class FLY_Resnet(nn.Module):
-    def __init__(self, num_joints=32):
+    def __init__(self, num_joints=38):
         super().__init__()
         self.backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.backbone.fc = nn.Sequential(
