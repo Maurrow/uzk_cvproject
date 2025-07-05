@@ -3,13 +3,15 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms.functional import normalize
+from torchvision.models import ResNet50_Weights
 
-class FLYDataset(Dataset):
-    def __init__(self, path_to_data, mode="training", cam=0, transform=None):
+class FLY_Dataset(Dataset):
+    def __init__(self, path_to_data, mode="training", cam=0, backbone="resnet"):
         self.cam = cam
         self.H = 480
         self.W = 960
-        self.transform = transform
+        self.backbone = backbone
 
         self.img_paths = []
         self.annotations = []
@@ -38,63 +40,27 @@ class FLYDataset(Dataset):
         if len(self.img_paths) != len(self.annotations):
             raise IndexError("Number of images and annotations must be the same")
 
-    def __getitem__(self, idx, transform=None):
+    def __getitem__(self, idx):
+
         if idx >= len(self):
             raise LookupError("Invalid index")
 
-        img = cv2.imread(self.img_paths[idx], cv2.IMREAD_GRAYSCALE)
-        img_tensor = torch.tensor(img, dtype=torch.float32) / 255.
-        img_tensor = img_tensor.unsqueeze(0)  # [1, H, W]
+        # Load image and process to be usable by models
+        img_tensor = cv2.imread(self.img_paths[idx], cv2.IMREAD_GRAYSCALE)
+        img_tensor = torch.tensor(img_tensor, dtype=torch.float32) / 255.0
+        img_tensor = img_tensor.unsqueeze(0)  # [H, W] -> [1, H, W] needed for training
+        if self.backbone == "resnet":
+            img_tensor = img_tensor.expand(3, -1, -1)  # 3 channels needed for ResNet
 
-        keypoints = torch.tensor(self.annotations[idx], dtype=torch.float32)  # [N, 2], (y,x) ∈ [0,1]
+        # Load keypoints and create a visibility mask, [32 (T/F)], of which keypoints are visible in ground_truth
+        # invisible keypoints are located at (0,0)
+        keypts = torch.tensor(self.annotations[idx], dtype=torch.float32)
+        visible = ~torch.all(keypts == 0.0, dim=1)
+        keypts[~visible] = -1.0
 
-        # Vor-Filter (optional)
-        pre_mask = (
-            (keypoints[:, 0] > 0) & (keypoints[:, 0] < 1) &
-            (keypoints[:, 1] > 0) & (keypoints[:, 1] < 1)
-        )
-        keypoints[~pre_mask] = -1.0
-
-        sample = {
-            "image": img_tensor,
-            "keypoints": keypoints
-        }
-
-        transform_to_use = transform or self.transform
-        if transform_to_use:
-            sample = transform_to_use(sample)
-
-        # Nach-Filter: Maskiere alles was out-of-bounds ist
-        kps = sample["keypoints"]
-        mask = (
-            (kps[:, 0] >= 0) & (kps[:, 0] <= 1) &
-            (kps[:, 1] >= 0) & (kps[:, 1] <= 1)
-        )
-        kps[~mask] = -1.0
-        sample["keypoints"] = kps
-
-        return sample["image"], sample["keypoints"]
+        return img_tensor, keypts, visible
 
     
     def __len__(self):
         # returning whole length of the dataset / number of images
         return len(self.img_paths)
-    
-    def __getvisual__(self, idx=0, transform=None):
-        """
-        Gibt das Bild und die gültigen Keypoints in Pixelkoordinaten zurück.
-        Optional: wendet eine andere Transform an als im Dataset.
-        Kein Plot!
-        """
-        # Hole das transformierte Sample (nutzt __getitem__)
-        img, keypoints = self.__getitem__(idx, transform=transform)
-
-        # Nur gültige Keypoints
-        valid = (keypoints != -1).all(dim=-1)
-        keypoints = keypoints[valid]
-
-        # Normierte Koordinaten → Pixel
-        x = keypoints[:, 1] * self.W  # x = Spalte
-        y = keypoints[:, 0] * self.H  # y = Zeile
-
-        return img.squeeze().numpy(), (x.numpy(), y.numpy())

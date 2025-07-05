@@ -55,3 +55,5 @@ class FlyTransformer:
         sample["angle"] = angle_deg  # optional für Debug
 
         return sample
+    
+class Fl
