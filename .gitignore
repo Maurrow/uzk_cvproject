@@ -195,3 +195,6 @@ cython_debug/
 
 # Mac Moment
 .DS_Store
+
+# PyTorch models
+*.pt
