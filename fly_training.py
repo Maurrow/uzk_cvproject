@@ -2,19 +2,20 @@ import torch
 from torch.utils.data import DataLoader
 import os
 import time
+import numpy as np
 from tqdm import tqdm
 from torchvision.transforms import v2
 
-from fly_dataset import FLY_Dataset            # :contentReference[oaicite:3]{index=3}
-from fly_resnet import FLY_Resnet              # :contentReference[oaicite:4]{index=4}
-from fly_rotate import FlyTransformer          # :contentReference[oaicite:5]{index=5}
+from fly_dataset import FLY_Dataset
+from fly_resnet import FLY_Resnet 
 
-# Hyperparameters
-DATA_PATH    = "/scratch/cv-course2025/group2/data"
-BATCH_SIZE   = 16
-NUM_EPOCHS   = 50
-LEARNING_RATE= 1e-4
-CAM_ID       = 0
+# Training Parameter
+path_to_data   = "/scratch/cv-course2025/group2/data"
+batch_size     = 16
+num_epochs     = 10
+lr             = 1e-4
+cam            = 0
+loss_threshold = 0.05
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -24,20 +25,21 @@ transforms = v2.Compose([
     v2.ToDtype(torch.float32, scale=True),          # Convert image to float32 and rescale pixel values from [0,255] → [0,1]
     v2.Normalize(
         mean=(0.485, 0.456, 0.406),
-        std=(0.229, 0.224, 0.225)
+        std=(0.229, 0.224, 0.225) # ResNet50
     )])
-train_ds = FLY_Dataset(path_to_data=DATA_PATH, mode="training", cam=CAM_ID, backbone="resnet")
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
+train_ds = FLY_Dataset(path_to_data=path_to_data, mode="training", cam=cam, backbone="resnet")
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
 # Model & optimizer
 model = FLY_Resnet().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-for epoch in range(1, NUM_EPOCHS + 1):
+prev_avg_loss = None
+for epoch in range(1, num_epochs + 1):
     model.train()
     epoch_loss = 0.0
 
-    loop = tqdm(train_loader, desc=f"Epoch {epoch}/{NUM_EPOCHS}", unit="batch")
+    loop = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", unit="batch")
     for images, keypts, visible in loop:
         # Move to device
         images  = images.to(device)      # [B,3,H,W]
@@ -71,6 +73,13 @@ for epoch in range(1, NUM_EPOCHS + 1):
 
     avg_loss = epoch_loss / len(train_loader)  # just for logging
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
+
+    # —— early exit condition ——  
+    if prev_avg_loss is not None and np.absolute(prev_avg_loss - avg_loss) < loss_threshold:
+        print(f"Stopping training: avg_loss worsened from ({prev_avg_loss:.4f} → {avg_loss:.4f})")
+        break
+
+    prev_avg_loss = avg_loss
 
 # Get current timestamp to have a unique identifier for the model
 timestr = time.strftime("%Y%m%d-%H%M%S")
