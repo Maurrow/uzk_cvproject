@@ -12,10 +12,10 @@ from fly_resnet import FLY_Resnet
 # Training Parameter
 path_to_data   = "/scratch/cv-course2025/group2/data"
 batch_size     = 16
-num_epochs     = 10
+num_epochs     = 100
 lr             = 1e-4
 cam            = 0
-loss_threshold = 0.05
+loss_threshold = 0.001
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -35,6 +35,7 @@ model = FLY_Resnet().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 prev_avg_loss = None
+real_epochs   = None
 for epoch in range(1, num_epochs + 1):
     model.train()
     epoch_loss = 0.0
@@ -75,8 +76,9 @@ for epoch in range(1, num_epochs + 1):
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
 
     # —— early exit condition ——  
-    if prev_avg_loss is not None and np.absolute(prev_avg_loss - avg_loss) < loss_threshold:
+    if prev_avg_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold:
         print(f"Stopping training: avg_loss worsened from ({prev_avg_loss:.4f} → {avg_loss:.4f})")
+        real_epochs = epoch
         break
 
     prev_avg_loss = avg_loss
@@ -84,7 +86,7 @@ for epoch in range(1, num_epochs + 1):
 # Get current timestamp to have a unique identifier for the model
 timestr = time.strftime("%Y%m%d-%H%M%S")
 # Save the trained model
-torch.save(model.state_dict(), os.path.join('.', f'deep-fly-model-resnet50_{timestr}.pt'))
+torch.save(model.state_dict(), os.path.join('.', f'deep-fly-model-resnet50_{timestr}_{real_epochs:02d}epochs.pt'))
 
 # Pre-Trained ResNet50 Model (ImageNet) to have a better starting point 
 
