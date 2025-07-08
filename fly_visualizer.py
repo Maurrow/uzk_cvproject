@@ -125,13 +125,9 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
         ax.axis("off")
 
         gt = gt.detach().cpu().numpy() * [H, W]
-        if pred is not None:
-            pred = pred.detach().cpu().numpy() * [H, W]
+        pred = pred.detach().cpu().numpy() * [H, W]
+        visible = visible.detach().cpu().numpy()
 
-        if visible is not None:
-            visible = visible.detach().cpu().numpy()
-        else:
-            visible = (keypoints_gt[:, 0] >= 0) & (keypoints_gt[:, 1] >= 0)
 
         # GT Punkte
         for i, (x, y) in enumerate(gt):
@@ -143,6 +139,24 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
             for i, (x, y) in enumerate(pred):
                 if visible[i]:
                     ax.scatter(y, x, c="red", s=10, marker="x", label="Pred" if i == 0 else "")
+            
+        skeleton = config["bones"]
+        
+
+        # draw bones
+
+        for a,b in skeleton:
+            if visible[a] and visible[b]:
+                xa,ya = gt[a]
+                xb,yb = gt[b]
+                ax.plot([ya,yb],[xa,xb], c="lime", lw=2)
+
+        for a,b in skeleton:
+            if visible[a] and visible[b]:
+                xa,ya = pred[a]
+                xb,yb = pred[b]
+                ax.plot([ya,yb],[xa,xb], c="red", lw=2)
+
 
     plt.tight_layout()
     plt.show()

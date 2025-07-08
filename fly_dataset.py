@@ -52,7 +52,7 @@ class FLY_Dataset(Dataset):
         if self.backbone == "resnet":
             img_tensor = img_tensor.expand(3, -1, -1)  # 3 channels needed for ResNet
 
-        # Load keypoints and create a visibility mask, [32 (T/F)], of which keypoints are visible in ground_truth
+        # Load keypoints and create a visibility mask, [38 (T/F)], of which keypoints are visible in ground_truth
         # invisible keypoints are located at (0,0)
         keypts = torch.tensor(self.annotations[idx], dtype=torch.float32)
         visible = ~torch.all(keypts == 0.0, dim=1)

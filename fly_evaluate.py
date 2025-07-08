@@ -78,7 +78,7 @@ def fly_evaluate_and_visualize(model, dataset, device="cuda", pck_thresh=5, visu
     mean_rmse = total_rmse / total_visible
     mean_pck = total_pck / total_visible
 
-    print("\nGesamtergebnisse:")
+    print("\nTotals:")
     print(f"  MSE  = {mean_mse:.2f} px²")
     print(f"  RMSE = {mean_rmse:.2f} px")
     print(f"  PCK  = {mean_pck*100:.2f}% (bei {pck_thresh}px Toleranz)")
@@ -124,7 +124,7 @@ def fly_eval(
         gt_px   = gt   * scale
 
         diff    = pred_px[mask] - gt_px[mask]                   # [N_vis,2] in px
-        sq_err  = diff.pow(2).sum(dim=1)                        # [N_vis] px²
+        sq_err  = diff.pow(2).sum(dim=1)                        # [N_vis] px squared
         euc     = sq_err.sqrt()                                # [N_vis] px
 
         n_vis   = mask.sum().item()
