@@ -75,7 +75,7 @@ for epoch in range(1, num_epochs + 1):
 
         # +1 for all keypoints used
         for single_image in masked_se:
-            n_keypoints_epoch[np.argmax(single_image)] += 1
+            n_keypoints_epoch[np.argmax(single_image.cpu().detach().numpy())] += 1
 
         # Backpropagation
         optimizer.zero_grad()

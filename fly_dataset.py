@@ -52,10 +52,19 @@ class FLY_Dataset(Dataset):
             # accepting RGB Images / Images with 3 channels.
             img_tensor = img_tensor.expand(3, -1, -1)
 
-        # Load keypoints and create a visibility mask, [38 (T/F)], of which keypoints 
-        # are visible in ground_truth. Invisible keypoints are located at (0,0)
+        # Load your 38×2 array of keypoints
         keypts = torch.tensor(self.annotations[idx], dtype=torch.float32)
-        visible = ~torch.all(keypts == 0.0, dim=1)
+
+        # Mask joints exactly at (0,0)
+        mask_zero = torch.all(keypts == 0.0, dim=1)       # True for (0,0)
+
+        # Mask joints exactly at (0,1)
+        mask_outside = (keypts[:, 0] == 0.0) & (keypts[:, 1] == 1.0)
+
+        # Visible = everything that is neither (0,0) nor (0,1)
+        visible = ~(mask_zero | mask_outside)            # shape [38]
+
+        # (Optional) set invisible joints’ coords to –1
         keypts[~visible] = -1.0
 
         return img_tensor, keypts, visible

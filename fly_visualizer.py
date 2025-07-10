@@ -127,7 +127,8 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
         gt = gt.detach().cpu().numpy() * [H, W]
         pred = pred.detach().cpu().numpy() * [H, W]
         visible = visible.detach().cpu().numpy()
-
+        #visible = ~visible
+        #print(visible)
 
         # GT Punkte
         for i, (x, y) in enumerate(gt):
@@ -141,7 +142,6 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
                     ax.scatter(y, x, c="red", s=10, marker="x", label="Pred" if i == 0 else "")
             
         skeleton = config["bones"]
-        
 
         # draw bones
 
