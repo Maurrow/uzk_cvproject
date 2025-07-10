@@ -74,8 +74,8 @@ for epoch in range(1, num_epochs + 1):
         loss      = masked_se.sum()        # raw sum over batch and joints
 
         # +1 for all keypoints used
-        for m in visible:
-            n_keypoints_epoch[m.cpu()] += 1
+        for single_image in masked_se:
+            n_keypoints_epoch[np.argmax(single_image)] += 1
 
         # Backpropagation
         optimizer.zero_grad()
@@ -88,7 +88,7 @@ for epoch in range(1, num_epochs + 1):
     avg_loss = epoch_loss / len(train_loader)
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
 
-    print(f"Keypoints called this epoch: {n_keypoints_epoch}")
+    print(f"Keypoints with most square error per image this epoch: {n_keypoints_epoch}")
     # reset epoch keypoint count, add to temp
     n_keyp_used_temp += n_keypoints_epoch
     n_keypoints_epoch *= 0
@@ -125,7 +125,7 @@ for epoch in range(1, num_epochs + 1):
         model.load_state_dict(saved_state)
         real_epochs = epoch - patience
         break
-print(f"Quantity of keypoints in entire training: {n_keypoints_used}")
+print(f"Keypoints with most square error per image in entire training: {n_keypoints_used}")
 
 # If no break, set real_epochs to last epoch
 if real_epochs == 0:
