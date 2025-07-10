@@ -2,9 +2,7 @@ import os
 import cv2
 import torch
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms.functional import normalize
-from torchvision.models import ResNet50_Weights
+from torch.utils.data import Dataset
 
 class FLY_Dataset(Dataset):
     def __init__(self, path_to_data, mode="training", cam=0, backbone="resnet"):
@@ -48,12 +46,14 @@ class FLY_Dataset(Dataset):
         # Load image and process to be usable by models
         img_tensor = cv2.imread(self.img_paths[idx], cv2.IMREAD_GRAYSCALE)
         img_tensor = torch.tensor(img_tensor, dtype=torch.float32) / 255.0
-        img_tensor = img_tensor.unsqueeze(0)  # [H, W] -> [1, H, W] needed for training
+        img_tensor = img_tensor.unsqueeze(0) #[H, W] -> [1, H, W]. Needed for training
         if self.backbone == "resnet":
-            img_tensor = img_tensor.expand(3, -1, -1)  # 3 channels needed for ResNet
+            # 3 Channels to create a fake RGB Image, due to ResNet only 
+            # accepting RGB Images / Images with 3 channels.
+            img_tensor = img_tensor.expand(3, -1, -1)
 
-        # Load keypoints and create a visibility mask, [38 (T/F)], of which keypoints are visible in ground_truth
-        # invisible keypoints are located at (0,0)
+        # Load keypoints and create a visibility mask, [38 (T/F)], of which keypoints 
+        # are visible in ground_truth. Invisible keypoints are located at (0,0)
         keypts = torch.tensor(self.annotations[idx], dtype=torch.float32)
         visible = ~torch.all(keypts == 0.0, dim=1)
         keypts[~visible] = -1.0
@@ -62,5 +62,4 @@ class FLY_Dataset(Dataset):
 
     
     def __len__(self):
-        # returning whole length of the dataset / number of images
         return len(self.img_paths)

@@ -4,6 +4,7 @@ from torchvision.models import resnet50, ResNet50_Weights
 class FLY_Resnet(nn.Module):
     def __init__(self, num_joints=38):
         super().__init__()
+        # Use a resnet50 model which is pretrained on IMAGENET
         self.backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.backbone.fc = nn.Sequential(
             nn.Linear(2048, 512),
