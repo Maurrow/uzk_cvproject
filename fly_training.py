@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import os
+import numpy as np
 import copy
 import time
 from tqdm import tqdm
@@ -73,7 +74,8 @@ for epoch in range(1, num_epochs + 1):
         loss      = masked_se.sum()        # raw sum over batch and joints
 
         # +1 for all keypoints used
-        n_keyp_used_epoch[maks] += 1
+        for m in visible:
+            n_keypoints_epoch[m.cpu()] += 1
 
         # Backpropagation
         optimizer.zero_grad()
@@ -85,20 +87,20 @@ for epoch in range(1, num_epochs + 1):
 
     avg_loss = epoch_loss / len(train_loader)
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
-    print(f"Keypoints called this epoch: {n_keyp_used_epoch}")
+
+    print(f"Keypoints called this epoch: {n_keypoints_epoch}")
     # reset epoch keypoint count, add to temp
-    n_keyp_used_temp += n_keyp_used_epoch
+    n_keyp_used_temp += n_keypoints_epoch
     n_keypoints_epoch *= 0
+
     # Check the performance of the current epoch against the last one
     is_worse = prev_avg_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold
-    
-    # TEMP
-    torch.save(model.state_dict(), os.path.join('.', f'deep-fly-model-resnet50_TEMP_{epoch:02d}.pt'))
 
-    if True: #is_worse:
+    if is_worse:
         if consec_worse == 0:
             # Save the model state if this is the first one which is worse
             saved_state = copy.deepcopy(model.state_dict())
+
             # increade keypoint counter
             n_keypoints_used += n_keyp_used_temp
             n_keyp_used_temp *= 0
@@ -108,13 +110,14 @@ for epoch in range(1, num_epochs + 1):
         # reset bad epoch counter, delete saved state
         consec_worse = 0
         saved_state  = None
+
         # increase keypoint count
         n_keypoints_used += n_keyp_used_temp
         n_keyp_used_temp *= 0
 
     prev_avg_loss = avg_loss
 
-    if consec_worse >= 2: #patience:
+    if consec_worse >= patience:
         print(
             f"No improvement for {patience} consecutive epochs. "
             f"Rolling back to state from {patience} epochs ago."
@@ -124,7 +127,7 @@ for epoch in range(1, num_epochs + 1):
         break
 print(f"Quantity of keypoints in entire training: {n_keypoints_used}")
 
-# if we never broke early, we used all epochs
+# If no break, set real_epochs to last epoch
 if real_epochs == 0:
     real_epochs = epoch
 
