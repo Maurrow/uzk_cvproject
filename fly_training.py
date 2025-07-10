@@ -1,31 +1,33 @@
 import torch
+import copy
 from torch.utils.data import DataLoader
 import os
 import time
-import numpy as np
 from tqdm import tqdm
 from torchvision.transforms import v2
 
 from fly_dataset import FLY_Dataset
 from fly_resnet import FLY_Resnet 
 
-# Training Parameter
 path_to_data   = "/scratch/cv-course2025/group2/data"
 batch_size     = 16
 num_epochs     = 100
 lr             = 1e-4
 cam            = 0
+
+# Early Stopping Condition Parameters
 loss_threshold = 0.001
+patience       = 5
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-# Dataset + DataLoader
+# Transforms, Dataset and Dataloader
 transforms = v2.Compose([
     v2.RandomRotation(degrees=15),                  # Rotate image randomly between -15 and +15 degrees
     v2.ToDtype(torch.float32, scale=True),          # Convert image to float32 and rescale pixel values from [0,255] → [0,1]
     v2.Normalize(
         mean=(0.485, 0.456, 0.406),
-        std=(0.229, 0.224, 0.225) # ResNet50
+        std=(0.229, 0.224, 0.225)                   # ResNet50 Normalizations
     )])
 train_ds = FLY_Dataset(path_to_data=path_to_data, mode="training", cam=cam, backbone="resnet")
 train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
@@ -35,7 +37,8 @@ model = FLY_Resnet().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 prev_avg_loss = None
-real_epochs   = None
+real_epochs   = 0
+consec_worse  = 0
 for epoch in range(1, num_epochs + 1):
     model.train()
     epoch_loss = 0.0
@@ -43,9 +46,9 @@ for epoch in range(1, num_epochs + 1):
     loop = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", unit="batch")
     for images, keypts, visible in loop:
         # Move to device
-        images  = images.to(device)      # [B,3,H,W]
-        keypts  = keypts.to(device)      # [B,J,2]
-        visible = visible.to(device)     # [B,J]
+        images  = images.to(device)        # [B,3,H,W]
+        keypts  = keypts.to(device)        # [B,J,2]
+        visible = visible.to(device)       # [B,J]
 
         # Apply random rotation per sample
         for i in range(images.size(0)):
@@ -55,16 +58,16 @@ for epoch in range(1, num_epochs + 1):
             keypts[i] = sample["keypoints"]
 
         # Forward
-        preds = model(images)            # [B,J,2]
+        preds = model(images)              # [B,J,2]
 
-        # ---- Un-normalized, fully explicit MSE over visible points ----
-        diff      = preds - keypts                       # [B,J,2]
-        sq_err    = diff.pow(2).sum(dim=2)               # [B,J]  (x² + y² per joint)
-        mask      = visible.float()                      # [B,J]
-        masked_se = sq_err * mask                        # zero out invisible
-        loss      = masked_se.sum()                      # raw sum over batch and joints
+        # MSE over visible points
+        diff      = preds - keypts         # [B,J,2]
+        sq_err    = diff.pow(2).sum(dim=2) # [B,J]  (x^2 + y^2 per joint)
+        mask      = visible.float()        # [B,J]
+        masked_se = sq_err * mask          # zero out invisible
+        loss      = masked_se.sum()        # raw sum over batch and joints
 
-        # Backprop
+        # Backpropagation
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -72,14 +75,36 @@ for epoch in range(1, num_epochs + 1):
         epoch_loss += loss.item()
         loop.set_postfix(batch_loss=loss.item())
 
-    avg_loss = epoch_loss / len(train_loader)  # just for logging
+    avg_loss = epoch_loss / len(train_loader)
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
 
-    # —— early exit condition ——  
-    if prev_avg_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold:
-        print(f"Stopping training: avg_loss worsened from ({prev_avg_loss:.4f} → {avg_loss:.4f})")
-        real_epochs = epoch
+    # Check the performance of the current epoch against the last one
+    is_worse = prev_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold
+
+    if is_worse:
+        if consec_worse == 0:
+            # Save the model state if this is the first one which is worse
+            saved_state = copy.deepcopy(model.state_dict())
+        # Increase the counter
+        consec_worse += 1
+    else:
+        consec_worse = 0
+        saved_state  = None
+
+    prev_loss = avg_loss
+
+    if consec_worse >= patience:
+        print(
+            f"No improvement for {patience} consecutive epochs. "
+            f"Rolling back to state from {patience} epochs ago."
+        )
+        model.load_state_dict(saved_state)
+        real_epochs = epoch - patience
         break
+
+# if we never broke early, we used all epochs
+if real_epochs == 0:
+    real_epochs = epoch
 
     prev_avg_loss = avg_loss
 
@@ -87,13 +112,3 @@ for epoch in range(1, num_epochs + 1):
 timestr = time.strftime("%Y%m%d-%H%M%S")
 # Save the trained model
 torch.save(model.state_dict(), os.path.join('.', f'deep-fly-model-resnet50_{timestr}_{real_epochs:02d}epochs.pt'))
-
-# Pre-Trained ResNet50 Model (ImageNet) to have a better starting point 
-
-
-# model.load_state_dict(torch.load('/scratch/cv-course2025/group2/uzk_cvproject/fly-test-resnet50_nice.pt'))
-# model.to(device)
-
-#model.load_state_dict(torch.load("./fly-test.pt"))
-#model.to(device)
-#visualize_predictions(m, test_dataset, device=device)
