@@ -1,7 +1,7 @@
 import torch
-import copy
 from torch.utils.data import DataLoader
 import os
+import copy
 import time
 from tqdm import tqdm
 from torchvision.transforms import v2
@@ -79,9 +79,12 @@ for epoch in range(1, num_epochs + 1):
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
 
     # Check the performance of the current epoch against the last one
-    is_worse = prev_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold
+    is_worse = prev_avg_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold
+    
+    # TEMP
+    torch.save(model.state_dict(), os.path.join('.', f'deep-fly-model-resnet50_TEMP_{epoch:02d}.pt'))
 
-    if is_worse:
+    if True: #is_worse:
         if consec_worse == 0:
             # Save the model state if this is the first one which is worse
             saved_state = copy.deepcopy(model.state_dict())
@@ -91,9 +94,9 @@ for epoch in range(1, num_epochs + 1):
         consec_worse = 0
         saved_state  = None
 
-    prev_loss = avg_loss
+    prev_avg_loss = avg_loss
 
-    if consec_worse >= patience:
+    if consec_worse >= 2: #patience:
         print(
             f"No improvement for {patience} consecutive epochs. "
             f"Rolling back to state from {patience} epochs ago."
