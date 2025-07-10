@@ -15,6 +15,11 @@ num_epochs     = 100
 lr             = 1e-4
 cam            = 0
 
+# list for counting occurrences of keypoints
+n_keypoints_used = np.zeros(38)
+n_keyp_used_temp = np.zeros(38)
+n_keypoints_epoch = np.zeros(38)
+
 # Early Stopping Condition Parameters
 loss_threshold = 0.001
 patience       = 5
@@ -67,6 +72,9 @@ for epoch in range(1, num_epochs + 1):
         masked_se = sq_err * mask          # zero out invisible
         loss      = masked_se.sum()        # raw sum over batch and joints
 
+        # +1 for all keypoints used
+        n_keyp_used_epoch[maks] += 1
+
         # Backpropagation
         optimizer.zero_grad()
         loss.backward()
@@ -77,7 +85,10 @@ for epoch in range(1, num_epochs + 1):
 
     avg_loss = epoch_loss / len(train_loader)
     print(f"Epoch {epoch:02d} — total loss: {epoch_loss:.4f}, avg batch loss: {avg_loss:.4f}")
-
+    print(f"Keypoints called this epoch: {n_keyp_used_epoch}")
+    # reset epoch keypoint count, add to temp
+    n_keyp_used_temp += n_keyp_used_epoch
+    n_keypoints_epoch *= 0
     # Check the performance of the current epoch against the last one
     is_worse = prev_avg_loss is not None and (prev_avg_loss - avg_loss) < loss_threshold
     
@@ -88,11 +99,18 @@ for epoch in range(1, num_epochs + 1):
         if consec_worse == 0:
             # Save the model state if this is the first one which is worse
             saved_state = copy.deepcopy(model.state_dict())
-        # Increase the counter
+            # increade keypoint counter
+            n_keypoints_used += n_keyp_used_temp
+            n_keyp_used_temp *= 0
+        # Increase the bad epoch counter, dont increase keypoint count yet
         consec_worse += 1
     else:
+        # reset bad epoch counter, delete saved state
         consec_worse = 0
         saved_state  = None
+        # increase keypoint count
+        n_keypoints_used += n_keyp_used_temp
+        n_keyp_used_temp *= 0
 
     prev_avg_loss = avg_loss
 
@@ -104,6 +122,7 @@ for epoch in range(1, num_epochs + 1):
         model.load_state_dict(saved_state)
         real_epochs = epoch - patience
         break
+print(f"Quantity of keypoints in entire training: {n_keypoints_used}")
 
 # if we never broke early, we used all epochs
 if real_epochs == 0:
