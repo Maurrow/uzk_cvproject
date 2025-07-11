@@ -94,7 +94,7 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
 
-    image = image[0]                     # fake-RGB → [H, W]
+    image = image[0]
     H, W = image.shape
 
     kp_gt = keypoints_gt.detach().cpu().numpy() * [H, W]
@@ -109,10 +109,10 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
     plt.imshow(image, cmap="gray")
     plt.title(title)
 
-    # fetch the “true” 38-point skeleton from DeepFly3D
-    skeleton = config["bones"]  # a list of [parent,child] pairs 
+    # Fetch the “true” 38-point skeleton from DeepFly3D config
+    skeleton = config["bones"]
 
-    # draw GT joints & bones
+    # Draw GT joints & bones
     for i,(x,y) in enumerate(kp_gt):
         if vis[i]:
             plt.scatter(y, x, c="lime", s=20, marker="o",
@@ -123,7 +123,7 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
             xb,yb = kp_gt[b]
             plt.plot([ya,yb],[xa,xb], c="lime", lw=2)
 
-    # draw Pred joints & bones
+    # Draw Pred joints & bones
     if kp_pred is not None:
         for i,(x,y) in enumerate(kp_pred):
             if vis[i]:
@@ -135,7 +135,6 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
                 xb,yb = kp_pred[b]
                 plt.plot([ya,yb],[xa,xb], c="red", lw=2)
 
-    # legend cleanup
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     if by_label:
@@ -177,7 +176,7 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
     for ax, image, gt, pred, visible, title in zip(axes, images, gts, preds, visibles, titles):
         if isinstance(image, torch.Tensor):
             image = image.detach().cpu().numpy()
-
+        # Prepare Plot Legend
         gt_handle   = ax.scatter([], [], c="lime", marker="o", s=30, label="GT")
         pred_handle = ax.scatter([], [], c="red",  marker="x", s=30, label="Pred")
 
@@ -190,23 +189,28 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
         gt           = gt.detach().cpu().numpy() * [H, W]
         pred         = pred.detach().cpu().numpy() * [H, W]
         visible      = visible.detach().cpu().numpy()
+        # We create a pred_mask that differs from the gt_mask to be able to
+        # perform evaluations on other cameras even though the model was 
+        # trained on a specific camera.
+        # This is done by taking the sum of the visible points in the visible 
+        # tensor and creating a mask which sets the first visible_sum points 
+        # to visible in the prediction.
         visible_sum  = sum(1 for v in visible if v)
         pred_visible = [True] * visible_sum + [False] * (len(visible) - visible_sum)
 
-        # GT Punkte
+        # Scatter GT
         for i, (x, y) in enumerate(gt):
             if visible[i]:
                 ax.scatter(y, x, c="lime", s=10, marker="o", label="GT" if i == 0 else "")
 
-        # Pred Punkte
+        # Scatter Predictions
         if pred is not None:
             for i, (x, y) in enumerate(pred):
                 if pred_visible[i]:
                     ax.scatter(y, x, c="red", s=10, marker="x", label="Pred" if i == 0 else "")
-            
-        skeleton = config["bones"]
 
-        # draw bones
+        # DeepFly3D Config    
+        skeleton = config["bones"]
         
         # GT Bones / Limbs
         for a,b in skeleton:

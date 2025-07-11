@@ -133,7 +133,8 @@ def fly_evaluate_visualize(
             extr_titles[1] = title
 
             # We use clear output here, to be able to display images without
-            # spamming images in the output
+            # spamming images in the output.
+            # This makes display of images while still evaluating possible.
             clear_output(wait=True)
             visualize_fly_batch(extr_images, extr_gts, extr_preds, extr_vis, extr_titles)
 

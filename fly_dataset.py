@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 
 class FLY_Dataset(Dataset):
     """
-    A PyTorch Dataset for fly pose estimation using 2D keypoints.
+    A Dataset for fly pose estimation using 2D keypoints.
 
     This dataset handles loading grayscale images and corresponding 
     normalized 2D keypoint annotations. It supports preprocessing to 
@@ -78,7 +78,11 @@ class FLY_Dataset(Dataset):
         # Load image and process to be usable by models
         img_tensor = cv2.imread(self.img_paths[idx], cv2.IMREAD_GRAYSCALE)
         img_tensor = torch.tensor(img_tensor, dtype=torch.float32) / 255.0
-        img_tensor = img_tensor.unsqueeze(0) #[H, W] -> [1, H, W]. Needed for training
+        img_tensor = img_tensor.unsqueeze(0)
+
+        # ‘backbone’ is legacy: we started with custom CNNs, then switched to
+        # pretrained ResNet50s. This condition lets us support both modes, 
+        # so we keep it for 'backward' compatibility.
         if self.backbone == "resnet":
             # 3 Channels to create a fake RGB Image, due to ResNet only 
             # accepting RGB Images / Images with 3 channels.
@@ -88,15 +92,16 @@ class FLY_Dataset(Dataset):
         keypts = torch.tensor(self.annotations[idx], dtype=torch.float32)
 
         # Mask joints exactly at (0,0)
-        mask_zero = torch.all(keypts == 0.0, dim=1)       # True for (0,0)
+        mask_zero = torch.all(keypts == 0.0, dim=1) 
 
         # Mask joints exactly at (0,1)
+        # These are the locations where DeepFly3D puts keypoints which are 
+        # currently not on the image / not detected.
         mask_outside = (keypts[:, 0] == 0.0) & (keypts[:, 1] == 1.0)
 
         # Visible = everything that is neither (0,0) nor (0,1)
-        visible = ~(mask_zero | mask_outside)            # shape [38]
+        visible = ~(mask_zero | mask_outside)
 
-        # (Optional) set invisible joints’ coords to –1
         keypts[~visible] = -1.0
 
         return img_tensor, keypts, visible
