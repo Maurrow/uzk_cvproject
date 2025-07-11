@@ -5,6 +5,38 @@ import numpy as np
 from torch.utils.data import Dataset
 
 class FLY_Dataset(Dataset):
+    """
+    A PyTorch Dataset for fly pose estimation using 2D keypoints.
+
+    This dataset handles loading grayscale images and corresponding 
+    normalized 2D keypoint annotations. It supports preprocessing to 
+    fit common backbones like ResNet (converting to 3-channel fake RGB image).
+
+    Parameters:
+    -----------
+    path_to_data : str
+        Root path to the dataset directory.
+
+    mode : str
+        Either "training" or "test" to select the data split.
+
+    cam : int
+        Camera ID used to select the subdirectory `cam{cam}`.
+
+    backbone : str
+        Backbone type, e.g. "resnet". If "resnet", converts grayscale images to 3-channel fake RGB.
+
+    Returns:
+    --------
+    img_tensor : torch.Tensor
+        The processed image tensor of shape [3, H, W] (if ResNet) or [1, H, W] (default).
+
+    keypts : torch.Tensor
+        Tensor of keypoint coordinates, shape [38, 2], values in [0, 1], or set to -1 for invisible points.
+
+    visible : torch.Tensor
+        Boolean mask of shape [38] indicating whether each keypoint is visible.
+    """
     def __init__(self, path_to_data, mode="training", cam=0, backbone="resnet"):
         self.cam = cam
         self.H = 480

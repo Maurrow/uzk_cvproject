@@ -1,11 +1,17 @@
+import argparse
 import numpy as np
 import shutil
 import pickle
 from pathlib import Path
 import re
 
-source_dir = Path("unsorted_data/training")
-target_dir = Path("data/training")
+parser = argparse.ArgumentParser(description="Organize and extract fly keypoints from unsorted, annotated data")
+parser.add_argument("--source", required=True, default="/unsorted_data/training", help="Path to unsorted data")
+parser.add_argument("--target", required=True, default="/data/training", help="Target output path")
+args = parser.parse_args()
+
+source_dir = Path(args.source)
+target_dir = Path(args.target)
 
 for cam_id in range(7):
     (target_dir / f"cam{cam_id}" / "images").mkdir(parents=True, exist_ok=True)
@@ -19,7 +25,7 @@ for folder in sorted(source_dir.glob("aDN_*_*")):
 
     match = re.match(r"aDN_(\d+)_(\d+)", folder.name)
     if not match:
-        print(f"Überspringe ungültigen Ordnernamen: {folder.name}")
+        print(f"Skipping invalid folder name: {folder.name}")
         continue
 
     fly_id = int(match.group(1))
@@ -29,11 +35,11 @@ for folder in sorted(source_dir.glob("aDN_*_*")):
     ann_file = list((image_dir / "df3d").glob("df3d_*.pkl"))[0]
 
     if not image_dir.is_dir():
-        print(f"Bilderordner fehlt: {image_dir}")
+        print(f"Missing Image Folder: {image_dir}")
         continue
 
     if not ann_file.is_file():
-        print(f"Keine Annotation gefunden: {ann_file}")
+        print(f"Missing annotation file: {ann_file}")
         continue
 
     with open(ann_file, "rb") as f:
@@ -57,7 +63,7 @@ for folder in sorted(source_dir.glob("aDN_*_*")):
             kp = points2d[cam_id, frame_id, :, :] 
             keypoints_by_cam[cam_id].append(kp)
         except IndexError:
-            print(f"Keine Keypoints für cam {cam_id}, frame {frame_id}")
+            print(f"No keypoints found for cam: {cam_id}, frame: {frame_id}")
 
 for cam_id, kplist in keypoints_by_cam.items():
     if kplist:
