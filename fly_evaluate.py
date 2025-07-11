@@ -2,15 +2,55 @@ from tqdm import tqdm
 import torch
 from torchvision.transforms.functional import normalize
 from IPython.display import clear_output
+
 from fly_visualizer import visualize_fly_batch
 
 def fly_evaluate_visualize(
     model,
     dataset,
     device="cuda:0",
-    pck_thresh=10,          # now interpreted in pixels
+    pck_thresh=10,
     visualize_every=500
 ):
+    """
+    Evaluates a 2D keypoint prediction model on a dataset and visualizes results.
+
+    This function computes pixel-wise evaluation metrics for predicted keypoints,
+    including mean squared error (MSE), root mean squared error (RMSE), and
+    Percentage of Correct Keypoints (PCK) based on a pixel threshold.
+
+    It also periodically visualizes predictions using a visualize function, displaying
+    the best (lowest RMSE), worst (highest RMSE), and current sample at a defined
+    interval.
+
+    Parameters:
+    ----------
+    model : torch.nn.Module
+        The trained keypoint regression model.
+
+    dataset : torch.utils.data.Dataset
+        A dataset returning (image, keypoints, visibility) for each sample.
+
+    device : str, optional
+        The device to use for evaluation, default is "cuda:0".
+
+    pck_thresh : float, optional
+        Pixel distance threshold used to compute PCK metric, default is 10.
+
+    visualize_every : int, optional
+        Interval at which to visualize a prediction sample during evaluation.
+
+    Returns:
+    -------
+    mean_mse : float
+        Mean squared error in pixel space, averaged over all visible keypoints.
+
+    mean_rmse : float
+        Root mean squared error in pixels.
+
+    mean_pck : float
+        Percentage of correct keypoints within the pck_thresh.
+    """
     model.eval()
 
     mean = [0.485, 0.456, 0.406]
@@ -31,20 +71,29 @@ def fly_evaluate_visualize(
 
     for i in tqdm(range(len(dataset)), desc="Evaluating", ncols=100):
         img, keypts, visible = dataset[i]
-        #normalize & batch→device
 
-        gt  = keypts.to(device)                                 # [J,2] normalized
-        mask= visible.to(device)
-        test_img = img.to(device).unsqueeze(0)
-        test_img = normalize(test_img, mean=mean, std=std)      # [1, 3, H, W] on CUDA
+        gt        = keypts.to(device)
+        mask      = visible.to(device)
+        # We create a pred_mask that differs from the gt_mask to be able to
+        # perform evaluations on other cameras even though the model was 
+        # trained on a specific camera.
+        # This is done by taking the sum of the visible points in the visible 
+        # tensor and creating a mask which sets the first visible_sum points 
+        # to visible in the prediction.
+        visible_sum = sum(1 for v in visible if v)
+        pred_mask   = [True] * visible_sum + [False] * (len(visible) - visible_sum)
+
+        test_img    = img.to(device).unsqueeze(0)
+        test_img    = normalize(test_img, mean=mean, std=std)
+
         with torch.no_grad():
-            pred_b = model(test_img)                # [J,2] normalized
+            pred_b = model(test_img)
         pred = pred_b.squeeze(0)
-        # # --- convert to pixel coords ---
+         
         pred_px = pred * scale
         gt_px   = gt   * scale
 
-        diff    = pred_px[mask] - gt_px[mask]
+        diff    = pred_px[pred_mask] - gt_px[mask]
         sq_err  = diff.pow(2).sum(dim=1)                  
         euc     = sq_err.sqrt()                              
 
@@ -52,7 +101,6 @@ def fly_evaluate_visualize(
         if n_vis == 0:
             continue
 
-        # accumulate
         total_mse     += sq_err.mean().item()  * n_vis
         total_rmse    += euc.mean().item()     * n_vis
         total_correct += (euc < pck_thresh).sum().item()
@@ -76,8 +124,6 @@ def fly_evaluate_visualize(
             extr_titles[2] = title
             max_euc = euc.mean().item()
 
-
-        # visualize
         if i % visualize_every == 0:
             title = f"#{i} RMSE={euc.mean().item():.1f}px PCK={100*(euc< pck_thresh).float().mean().item():.1f}%"
             extr_images[1] = test_img.cpu().squeeze(0)
@@ -86,14 +132,15 @@ def fly_evaluate_visualize(
             extr_vis[1] = visible
             extr_titles[1] = title
 
+            # We use clear output here, to be able to display images without
+            # spamming images in the output
             clear_output(wait=True)
-            #print(extr_images)
             visualize_fly_batch(extr_images, extr_gts, extr_preds, extr_vis, extr_titles)
 
-    # averages
     mean_mse  = total_mse  / total_visible
     mean_rmse = total_rmse / total_visible
     mean_pck  = total_correct / total_visible
 
     print(f"\nResults:  MSE={mean_mse:.2f}px²,  RMSE={mean_rmse:.2f}px,  PCK@{pck_thresh}px={mean_pck*100:.2f}%")
     return mean_mse, mean_rmse, mean_pck
+

@@ -6,9 +6,26 @@ from df3d.config import config
 
 def visualize_fly(image, keypoints_gt, keypoints_pred=None, visible=None, title="Fly Visualization"):
     """
-    Visualisiert Fly-Bild mit Ground-Truth-Keypoints und optional Predicted Keypoints.
-    Geht davon aus, dass das Bild [3, H, W] Fake-RGB ist (alle Kanäle gleich).
+    Visualizes a single fly image with ground truth keypoints and optionally predicted keypoints.
+
+    Parameters:
+    -----------
+    image : torch.Tensor or numpy.ndarray
+        The fly image of shape [3, H, W] or [1, H, W]; assumed to be fake-RGB (all channels equal).
+
+    keypoints_gt : torch.Tensor
+        Ground truth keypoints in normalized [0, 1] coordinates of shape [J, 2].
+
+    keypoints_pred : torch.Tensor, optional
+        Predicted keypoints in normalized [0, 1] coordinates of shape [J, 2]. Defaults to None.
+
+    visible : torch.Tensor or list, optional
+        Boolean mask for visible keypoints. If None, visibility is inferred from GT positions.
+
+    title : str
+        Title for the plot.
     """
+
 
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
@@ -52,6 +69,28 @@ def visualize_fly(image, keypoints_gt, keypoints_pred=None, visible=None, title=
     plt.show()
 
 def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=None, title="Fly w/ Limbs"):
+    """
+    Visualizes a fly image with both ground truth and predicted keypoints, as well as limb connections (bones).
+
+    Parameters:
+    -----------
+    image : torch.Tensor or numpy.ndarray
+        Fly image, assumed to be grayscale or fake-RGB. Shape [3, H, W] or [1, H, W].
+
+    keypoints_gt : torch.Tensor
+        Ground truth keypoints (normalized) as [J, 2].
+
+    keypoints_pred : torch.Tensor, optional
+        Predicted keypoints (normalized) as [J, 2]. If provided, predictions are also shown.
+
+    visible : torch.Tensor or list, optional
+        Boolean array marking which keypoints are visible. If None, inferred from GT.
+
+    title : str
+        Title for the plot.
+    """
+
+
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
 
@@ -108,9 +147,29 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
 
 
 def visualize_fly_batch(images, gts, preds, visibles, titles):
+    """
+    Visualizes a batch of fly images with their keypoints and limbs in a single row of subplots.
+
+    Parameters:
+    -----------
+    images : list of torch.Tensor
+        List of fly images of shape [1, H, W] (grayscale or fake-RGB).
+
+    gts : list of torch.Tensor
+        List of ground truth keypoints (normalized) per image.
+
+    preds : list of torch.Tensor
+        List of predicted keypoints (normalized) per image.
+
+    visibles : list of torch.Tensor
+        List of boolean visibility masks per image.
+
+    titles : list of str
+        List of titles (one per subplot/image).
+    """
     num = len(images)
     clear_output(wait=True)
-    fig, axes = plt.subplots(1, num, figsize=(num * 6, 6))
+    fig, axes = plt.subplots(1, num, figsize=(num * 6, 4))
 
     if num == 1:
         axes = [axes]
@@ -118,17 +177,21 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
     for ax, image, gt, pred, visible, title in zip(axes, images, gts, preds, visibles, titles):
         if isinstance(image, torch.Tensor):
             image = image.detach().cpu().numpy()
+
+        gt_handle   = ax.scatter([], [], c="lime", marker="o", s=30, label="GT")
+        pred_handle = ax.scatter([], [], c="red",  marker="x", s=30, label="Pred")
+
         image = image[0]
         H, W = image.shape
         ax.imshow(image, cmap="gray")
         ax.set_title(title)
         ax.axis("off")
 
-        gt = gt.detach().cpu().numpy() * [H, W]
-        pred = pred.detach().cpu().numpy() * [H, W]
-        visible = visible.detach().cpu().numpy()
-        #visible = ~visible
-        #print(visible)
+        gt           = gt.detach().cpu().numpy() * [H, W]
+        pred         = pred.detach().cpu().numpy() * [H, W]
+        visible      = visible.detach().cpu().numpy()
+        visible_sum  = sum(1 for v in visible if v)
+        pred_visible = [True] * visible_sum + [False] * (len(visible) - visible_sum)
 
         # GT Punkte
         for i, (x, y) in enumerate(gt):
@@ -138,25 +201,34 @@ def visualize_fly_batch(images, gts, preds, visibles, titles):
         # Pred Punkte
         if pred is not None:
             for i, (x, y) in enumerate(pred):
-                if visible[i]:
+                if pred_visible[i]:
                     ax.scatter(y, x, c="red", s=10, marker="x", label="Pred" if i == 0 else "")
             
         skeleton = config["bones"]
 
         # draw bones
-
+        
+        # GT Bones / Limbs
         for a,b in skeleton:
             if visible[a] and visible[b]:
                 xa,ya = gt[a]
                 xb,yb = gt[b]
                 ax.plot([ya,yb],[xa,xb], c="lime", lw=2)
 
+        # Pred Bones / Limbs
         for a,b in skeleton:
-            if visible[a] and visible[b]:
+            if pred_visible[a] and pred_visible[b]:
                 xa,ya = pred[a]
                 xb,yb = pred[b]
                 ax.plot([ya,yb],[xa,xb], c="red", lw=2)
-
-
+    
+    fig.legend(
+        handles=[gt_handle, pred_handle],
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.05),
+        ncol=2,
+        frameon=True,
+        fontsize=18
+    )
     plt.tight_layout()
     plt.show()

@@ -1,3 +1,4 @@
+import argparse
 import torch
 from torch.utils.data import DataLoader
 import os
@@ -10,11 +11,21 @@ from torchvision.transforms import v2
 from fly_dataset import FLY_Dataset
 from fly_resnet import FLY_Resnet 
 
-path_to_data   = "/scratch/cv-course2025/group2/data"
-batch_size     = 16
-num_epochs     = 100
-lr             = 1e-4
-cam            = 0
+parser = argparse.ArgumentParser(description="Train ResNet-based fly pose model")
+parser.add_argument("--data", type=str, required=True, help="Path to the root data directory")
+parser.add_argument("--cam", type=int, default=0, help="Camera ID to use (default: 0)")
+parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+parser.add_argument("--batch_size", type=int, default=16, help="Batch size")
+parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+parser.add_argument("--patience", type=int, default=5, help="Patience for early stopping")
+args = parser.parse_args()
+
+path_to_data = args.data
+cam = args.cam
+num_epochs = args.epochs
+batch_size = args.batch_size
+lr = args.lr
+patience = args.patience
 
 # list for counting occurrences of keypoints
 n_keypoints_used = np.zeros(38)
@@ -136,4 +147,4 @@ if real_epochs == 0:
 # Get current timestamp to have a unique identifier for the model
 timestr = time.strftime("%Y%m%d-%H%M%S")
 # Save the trained model
-torch.save(model.state_dict(), os.path.join('.', f'deep-fly-model-resnet50_{timestr}_{real_epochs:02d}epochs.pt'))
+torch.save(model.state_dict(), os.path.join('.', f'cam{cam}_deep-fly-model-resnet50_{timestr}_{real_epochs:02d}epochs.pt'))
