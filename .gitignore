@@ -197,4 +197,4 @@ cython_debug/
 .DS_Store
 
 # PyTorch models
-/models/*
+.models/*
