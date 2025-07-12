@@ -1,8 +1,8 @@
-# Animal Pose Esitmation: 2D Limb Pose Estimation for Tethered Fruit Flies
+# Animal Pose Estimation: 2D Limb Pose Estimation for Tethered Fruit Flies
 
 ## Project Description
 
-This project implements a 2D keypoint detection pipeline for predicting limb poses in tethered flies using deep learning. The model is trained on one camera fly recordings and annotations provided by DeepFly3D. It uses a ResNet50 backbone adapted for regression of 38 keypoints per frame.
+This project implements a 2D keypoint detection for predicting limb poses in tethered fruit flies using deep learning. The model is trained on a single camera angle. The annotations are created with the model of DeepFly3D. It uses a ResNet50 backbone adapted for regression of 38 keypoints per frame.
 
 ## Quick Start
 
@@ -78,10 +78,11 @@ python3 fly_training.py --data <path-to-data>
 optional parameters:<br>
 | Argument               | Description                                                                                         | Default   |
 |------------------------|-----------------------------------------------------------------------------------------------------|-----------|
-| `--cam <cam_id>`       | ID of the camera to train the model on                                                             | `0`       |
+| `--cam <cam_id>`       | ID of the camera to train the model on                                                              | `0`       |
 | `--epochs <num_epochs>`| Number of training epochs                                                                           | `100`     |
 | `--batch_size <size>`  | Batch size used during training                                                                     | `16`      |
 | `--lr <learning_rate>` | Learning rate for the optimizer                                                                     | `1e-4`    |
+| `--lt <loss_threshold>` | Loss threshold for early stopping                                                                  | `0.001`   |
 | `--patience <num_epochs>`       | Epochs with no improvement before early stopping is triggered                                       | `5`       |
 
 ### 3. Evaluate and visualize predictions:
@@ -101,16 +102,17 @@ In case you want to visualize on a remote you can also use the Jupyter Notebook 
 ## File Overview
 | File/Dir                       | Description                                                                          |
 | ---------------------------------------- | ---------------------------------------------------------------------------|
-| `requirements.txt`                       | Conda environment list export                                              |
-| `create_data_structure.py`               | Extracts and reorganizes raw annotated fly data by camera                  |
-| `fly_dataset.py`                         | Dataset class for loading images, keypoints, and visibility masks          |
-| `fly_training.py`                        | Training loop with rotation augmentation and early stopping                |
-| `fly_resnet.py`                          | ResNet50-based keypoint regression model definition                        |
-| `fly_evaluate.py`                        | Evaluation and visualization: RMSE, PCK, and image plotting                |
-| `fly_visualizer.py`                      | Functions to visualize single or batch predictions with skeleton structure |
-| `fly_evaluate_visualize.ipynb`           | Jupyter notebook version for interactive experimentation                   |
-| `models/*`                               | Directory where the trained models are stored. The best performing one being: `cam0_deep-fly-model-resnet50_20250711-020806_27epochs`                                                                 |
+| [`requirements.txt`](./requirements.txt)                       | Conda environment list export                                              |
+| [`create_data_structure.py`](./create_data_structure.py)               | Extracts and reorganizes raw annotated fly data by camera                  |
+| [`fly_dataset.py`](./fly_dataset.py)                         | Dataset class for loading images, keypoints, and visibility masks          |
+| [`fly_training.py`](./fly_training.py)                        | Training loop with rotation augmentation and early stopping                |
+| [`fly_resnet.py`](./fly_resnet.py)                          | ResNet50-based keypoint regression model definition                        |
+| [`fly_evaluate.py`](./fly_evaluate.py)                        | Evaluation and visualization: RMSE, PCK, and image plotting                |
+| [`fly_visualizer.py`](./fly_visualizer.py)                      | Functions to visualize single or batch predictions with skeleton structure |
+| [`fly_evaluate_visualize.ipynb`](./fly_evaluate_visualize.ipynb)           | Jupyter notebook version for interactive experimentation                   |
+| [`models/*`](./models/)                               | Directory where the trained models are stored ([best](./models/cam0_deep-fly-model-resnet50_20250711-020806_27epochs.pt))                                                                |
 
 ## References
 - ResNet50 backbone sourced from torchvision.models, pretrained on ImageNet
-- Bone visualization logic / limb detection is using config["bones"] from the DeepFly3D structure.
+- Bone visualization logic / limb detection is using `config["bones"]` from [DeepFly3D](https://elifesciences.org/articles/48571).
+- To see the dataset used for this project: [Harvard Dataverse](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/PKKXOE)

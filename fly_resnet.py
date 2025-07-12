@@ -7,7 +7,7 @@ class FLY_Resnet(nn.Module):
 
     This module loads a ResNet50 pretrained on ImageNet (IMAGENET1K_V2 weights)
     and replaces its final fully-connected layer with a two-stage head that
-    maps the 2048-dim feature vector to `num_joints * 2` outputs, corresponding
+    maps the 2048-dim feature vector to 'num_joints * 2' outputs, corresponding
     to the (x, y) coordinates of each keypoint.
 
     Args:

@@ -5,7 +5,7 @@ import pickle
 from pathlib import Path
 import re
 
-parser = argparse.ArgumentParser(description="Organize and extract fly keypoints from unsorted, annotated data")
+parser = argparse.ArgumentParser(description="Organize and extract fly images and respective keypoints from unsorted, annotated data")
 parser.add_argument("--source", required=True, default="/unsorted_data/training", help="Path to unsorted data")
 parser.add_argument("--target", required=True, default="/data/training", help="Target output path")
 args = parser.parse_args()

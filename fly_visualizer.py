@@ -14,19 +14,17 @@ def visualize_fly(image, keypoints_gt, keypoints_pred=None, visible=None, title=
         The fly image of shape [3, H, W] or [1, H, W]; assumed to be fake-RGB (all channels equal).
 
     keypoints_gt : torch.Tensor
-        Ground truth keypoints in normalized [0, 1] coordinates of shape [J, 2].
+        Ground truth keypoints (normalized).
 
     keypoints_pred : torch.Tensor, optional
-        Predicted keypoints in normalized [0, 1] coordinates of shape [J, 2]. Defaults to None.
+        Predicted keypoints (normalized). If provided, predictions are also plotted.
 
     visible : torch.Tensor or list, optional
-        Boolean mask for visible keypoints. If None, visibility is inferred from GT positions.
+        Boolean array marking which keypoints are visible. If None, inferred from GT.
 
     title : str
         Title for the plot.
     """
-
-
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
 
@@ -75,13 +73,13 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
     Parameters:
     -----------
     image : torch.Tensor or numpy.ndarray
-        Fly image, assumed to be grayscale or fake-RGB. Shape [3, H, W] or [1, H, W].
+        The fly image of shape [3, H, W] or [1, H, W]; assumed to be fake-RGB (all channels equal).
 
     keypoints_gt : torch.Tensor
-        Ground truth keypoints (normalized) as [J, 2].
+        Ground truth keypoints (normalized).
 
     keypoints_pred : torch.Tensor, optional
-        Predicted keypoints (normalized) as [J, 2]. If provided, predictions are also shown.
+        Predicted keypoints (normalized). If provided, predictions are also plotted.
 
     visible : torch.Tensor or list, optional
         Boolean array marking which keypoints are visible. If None, inferred from GT.
@@ -89,8 +87,6 @@ def visualize_fly_with_limbs(image, keypoints_gt, keypoints_pred=None, visible=N
     title : str
         Title for the plot.
     """
-
-
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
 
