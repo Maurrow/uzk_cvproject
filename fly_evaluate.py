@@ -53,6 +53,7 @@ def fly_evaluate_visualize(
     """
     model.eval()
 
+    # ResNet50 Normalizations (parameters from the ResNet50 IMAGENET1K_V2)
     mean = [0.485, 0.456, 0.406]
     std  = [0.229, 0.224, 0.225]
 

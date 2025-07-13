@@ -80,10 +80,12 @@ for epoch in range(1, num_epochs + 1):
         diff      = preds - keypts
         sq_err    = diff.pow(2).sum(dim=2)
         mask      = visible.float()
-        masked_se = sq_err * mask # zero out invisible
+        masked_se = sq_err * mask   # zero out invisible
         loss      = masked_se.sum() # raw sum over batch and joints
 
-        # +1 for all keypoints used
+        # For each image, find the keypoint with the highest squared error
+        # and increment its counter. Over all epochs this highlights
+        # which keypoints are most frequently the worst predicted
         for single_image in masked_se:
             n_keypoints_epoch[np.argmax(single_image.cpu().detach().numpy())] += 1
 
@@ -108,7 +110,8 @@ for epoch in range(1, num_epochs + 1):
 
     if is_worse:
         if consec_worse == 0:
-            # Save the model state if this is the first one which is worse
+            # Save the model state if this is the first epoch which is 
+            # performing worse than previous - Rollback state
             saved_state = copy.deepcopy(model.state_dict())
 
             # increase keypoint counter
